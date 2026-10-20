@@ -609,7 +609,7 @@ td.money-col{font-family:var(--body);font-size:14px}
     state.year=ys.length?Math.max.apply(null,ys):new Date().getFullYear();
   }
   function yearList(){
-    var cy=new Date().getFullYear(),ys={};ys[cy]=1;ys[cy-1]=1;ys[state.year]=1;
+    var cy=new Date().getFullYear(),ys={};ys[cy]=1;ys[state.year]=1;
     (state.meta.years||[]).forEach(function(y){ys[y]=1});
     state.interp.concat(state.lect).forEach(function(r){var y=(r.date||'').slice(0,4);if(/^\d{4}$/.test(y))ys[y]=1});
     return Object.keys(ys).map(Number).sort(function(a,b){return a-b});
