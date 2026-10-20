@@ -1,0 +1,828 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>통역 정산 대시보드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@600;700&display=swap">
+<style>
+/* Layout: one ledger column. Header (year, add buttons) > tabs > summary tiles, monthly chart, monthly ledger, ratio cards; work tab mirrors the Excel sheet (first/second half bands with subtotals); lecture tab groups by institution. */
+:root{
+  --bg:#F4F6F5; --surface:#FFFFFF; --surface-2:#ECF0EE; --ink:#15201E; --ink-2:#51605D; --line:#D8DFDC;
+  --interp:#1B5E63; --lect:#5B52A3; --good:#2B7A4B; --warn:#A85D0A; --danger:#B3261E;
+  --c1:#1B5E63; --c2:#5B52A3; --c3:#C07A12; --c4:#B8476B; --c5:#2F6FB3; --c6:#7C8B88;
+  --side-bg:#10252A; --side-ink:#E3EEEC; --side-ink-2:#8FA8A5; --side-active:#1F3F44; --side-hover:#18343A;
+  --on-accent:#FFFFFF; --hero-bg:#16302F; --hero-ink:#EAF4F2; --hero-ink-2:#9FBAB6; --scrim:rgba(10,20,19,.5);
+  --display:'Noto Serif KR','Batang',serif;
+  --body:'IBM Plex Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1615; --surface:#172120; --surface-2:#1F2C2B; --ink:#E6EEEC; --ink-2:#9DB0AC; --line:#2A3A38;
+    --interp:#55B5BA; --lect:#A39BEA; --good:#5BC48A; --warn:#E0A04A; --danger:#F2877F;
+    --c1:#55B5BA; --c2:#A39BEA; --c3:#E0A04A; --c4:#E58AA8; --c5:#6FAEEA; --c6:#8FA09D;
+    --side-bg:#0A1211; --side-ink:#E3EEEC; --side-ink-2:#8FA8A5; --side-active:#1B2D2C; --side-hover:#131F1E;
+    --on-accent:#0B1413; --hero-bg:#1D3B39; --hero-ink:#EAF4F2; --hero-ink-2:#9FBAB6; --scrim:rgba(0,0,0,.6);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1615; --surface:#172120; --surface-2:#1F2C2B; --ink:#E6EEEC; --ink-2:#9DB0AC; --line:#2A3A38;
+  --interp:#55B5BA; --lect:#A39BEA; --good:#5BC48A; --warn:#E0A04A; --danger:#F2877F;
+  --c1:#55B5BA; --c2:#A39BEA; --c3:#E0A04A; --c4:#E58AA8; --c5:#6FAEEA; --c6:#8FA09D;
+    --side-bg:#0A1211; --side-ink:#E3EEEC; --side-ink-2:#8FA8A5; --side-active:#1B2D2C; --side-hover:#131F1E;
+    --on-accent:#0B1413; --hero-bg:#1D3B39; --hero-ink:#EAF4F2; --hero-ink-2:#9FBAB6; --scrim:rgba(0,0,0,.6);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;line-height:1.5}
+.app{display:grid;grid-template-columns:240px minmax(0,1fr);min-height:100vh}
+.side{position:sticky;top:0;height:100vh;background:var(--side-bg);color:var(--side-ink);display:flex;flex-direction:column;gap:22px;
+  padding:22px 14px;padding-left:max(14px,env(safe-area-inset-left,0px));overflow-y:auto}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:700;font-size:17px;padding:0 8px}
+.logo{width:34px;height:34px;border-radius:10px;background:var(--interp);color:var(--on-accent);display:grid;place-items:center;font-family:var(--body);font-weight:600;flex:none}
+.nav{display:flex;flex-direction:column;gap:4px}
+.navb{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:11px 12px;border:0;border-radius:10px;background:transparent;color:var(--side-ink-2);cursor:pointer;font-size:14px}
+.navb svg{width:18px;height:18px;flex:none}
+.navb:hover{background:var(--side-hover);color:var(--side-ink)}
+.navb[aria-current=page]{background:var(--side-active);color:var(--side-ink);font-weight:600}
+.navb:focus-visible{outline:2px solid var(--side-ink);outline-offset:-2px}
+.side-foot{margin-top:auto;padding:0 8px;font-size:12px;color:var(--side-ink-2)}
+.main{padding-block:26px 56px;padding-left:32px;padding-right:max(24px,env(safe-area-inset-right,0px));min-width:0;width:100%}
+.top{margin-bottom:14px}
+.years{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:18px}
+.ytab{padding:7px 18px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer;font-variant-numeric:tabular-nums}
+.ytab:hover{background:var(--surface-2);color:var(--ink)}
+.ytab[aria-selected=true]{background:var(--interp);border-color:var(--interp);color:var(--on-accent);font-weight:600}
+.ytab.add{border-style:dashed;background:transparent}
+.yadd{display:flex;gap:6px;align-items:center}
+.yadd input{width:96px}
+.ytab:focus-visible{outline:2px solid var(--interp);outline-offset:2px}
+@media (max-width:860px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .side{height:auto;flex-direction:row;align-items:center;gap:8px;z-index:10;padding:10px 12px;
+    padding-top:max(10px,env(safe-area-inset-top,0px));padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));overflow-x:auto}
+  .brand .bt,.side-foot{display:none}
+  .brand{padding:0}
+  .nav{flex-direction:row;gap:2px}
+  .navb{white-space:nowrap;padding:8px 12px;width:auto}
+  .main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-top:18px}
+}
+.top{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-end;justify-content:space-between}
+h1{font-family:var(--display);font-size:26px;line-height:1.25;margin:0;font-weight:700;text-wrap:balance}
+.sub{margin:2px 0 0;color:var(--ink-2)}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+select,input,button,textarea{font:inherit;color:inherit}
+select,input[type=text],input[type=date],input[type=number],input[type=search],textarea{
+  background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-width:0;max-width:100%}
+textarea{resize:vertical}
+select:focus-visible,input:focus-visible,button:focus-visible,textarea:focus-visible{outline:2px solid var(--interp);outline-offset:2px}
+.btn{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn.pi{background:var(--interp);border-color:var(--interp);color:var(--on-accent);font-weight:500}
+.btn.pl{background:var(--lect);border-color:var(--lect);color:var(--on-accent);font-weight:500}
+.btn.pi:hover{background:var(--interp);filter:brightness(1.08)}
+.btn.pl:hover{background:var(--lect);filter:brightness(1.08)}
+.btn.sm{padding:3px 9px;font-size:12px}
+.btn.danger{color:var(--danger);border-color:var(--danger)}
+.stack{display:flex;flex-direction:column;gap:14px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0}
+.tile .k{font-size:12px;color:var(--ink-2)}
+.tile .v{font-family:var(--display);font-size:24px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;line-height:1.3}
+.tile .n{font-size:12px;color:var(--ink-2);margin-top:2px}
+.tile.hero{background:var(--hero-bg);border-color:var(--hero-bg);color:var(--hero-ink)}
+.tile.hero .k,.tile.hero .n{color:var(--hero-ink-2)}
+.tile.hero .v{font-size:30px}
+.u{font-family:var(--body);font-size:.55em;font-weight:500;margin-left:2px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+h2{font-size:15px;margin:0 0 12px;font-weight:600}
+.cardhead{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;align-items:baseline;margin-bottom:8px}
+.cardhead h2{margin:0}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--ink-2)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.mix{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:14px;align-items:stretch}
+@media (max-width:1100px){.mix{grid-template-columns:minmax(0,1fr)}}
+.rcol{display:flex;flex-direction:column;gap:14px;min-width:0;width:100%}
+.dcard{padding:12px 16px;container-type:inline-size}
+.dcard h3{font-size:13.5px;font-weight:600;margin:0 0 8px;display:flex;flex-wrap:wrap;gap:2px 8px;align-items:baseline}
+.dcard h3 span{font-weight:400;color:var(--ink-2);font-size:12px}
+/* 도넛은 카드 너비에 비례해 커지고, 범례는 남는 폭을 막대로 채워서 어떤 해상도에서도 빈 공간이 생기지 않습니다. */
+.dbody{display:grid;grid-template-columns:auto minmax(0,420px);justify-content:center;gap:clamp(16px,3cqw,36px);align-items:center}
+.dbody svg{display:block;width:clamp(92px,13cqw,170px);height:auto;transform:translateX(calc(-1*max(0px,(100cqw - 32px - 420px - 16cqw)/6)))}
+.dbody .empty{grid-column:1/-1}
+.dcard .track{stroke:var(--surface-2)}
+.dcard .dv{fill:var(--ink);font-family:var(--display);font-weight:700}
+.dcard .ds{fill:var(--ink-2);font:10px var(--body)}
+.lg{display:grid;grid-template-columns:10px minmax(0,max-content) minmax(28px,1fr) max-content max-content;max-width:420px;column-gap:10px;row-gap:9px;align-items:center;font-size:12.5px;min-width:0;width:100%}
+.lg .sw{width:10px;height:10px;border-radius:2px}
+.lg .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.lg .bt{height:7px;background:var(--surface-2);border-radius:4px;overflow:hidden;min-width:0}
+.lg .bt i{display:block;height:100%;border-radius:4px}
+.lg .sv{margin-left:8px;color:var(--ink-2);font-size:12px;text-align:right;white-space:nowrap}
+.lg .pc{font-family:var(--mono);font-size:12.5px;text-align:right;white-space:nowrap;min-width:3.9em}
+@container (max-width:470px){.lg{grid-template-columns:10px minmax(0,max-content) minmax(20px,1fr) max-content}.lg .sv{display:none}}
+.vl{fill:var(--ink);font:500 10px var(--mono)}
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th{font-size:12px;text-align:left;color:var(--ink-2);font-weight:500;padding:8px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th.num,td.num{text-align:right;white-space:nowrap;font-family:var(--mono);font-size:13px}
+td.nw{white-space:nowrap}
+td.nm{min-width:280px}
+td.ag{white-space:nowrap;min-width:140px}
+td.pt{white-space:nowrap;min-width:120px}
+td.pre{white-space:pre-line;font-size:12.5px;min-width:120px}
+td.tm{white-space:pre;font-size:12.5px;min-width:140px;font-family:var(--mono)}
+tfoot td{font-weight:600;border-top:2px solid var(--ink);border-bottom:0}
+tr.cur td{background:var(--surface-2)}
+tr.band td{background:var(--surface-2);font-weight:600;font-size:13px;border-bottom:1px solid var(--line)}
+tr.subt td{font-weight:600;border-bottom:2px solid var(--line)}
+tr.subt td.lab{text-align:right;color:var(--ink-2)}
+.mut{color:var(--ink-2);font-size:12px}
+.dim{color:var(--ink-2)}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:var(--surface-2);white-space:nowrap;line-height:1.6}
+.pill.sim{background:var(--interp);border-color:var(--interp);color:var(--on-accent)}
+.pill.con{background:transparent;border-color:var(--interp);color:var(--interp)}
+.pill.tr{background:transparent;border-color:var(--lect);color:var(--lect)}
+button.pill{cursor:pointer;font-family:inherit}
+.st0{color:var(--warn);border-color:var(--warn);background:transparent}
+.st1{color:var(--good);border-color:var(--good);background:transparent}
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.filters input[type=search]{flex:1 1 200px}
+.acts{display:flex;gap:10px;white-space:nowrap;align-items:center}
+.status-actions{justify-content:space-between;gap:12px;min-width:0;width:100%;padding-right:0}
+/* 업무 내역: 모든 연도에서 동일한 열 비율을 유지하면서 화면 너비를 채움 */
+#interp-table table{width:100%;table-layout:fixed}
+#interp-table th,#interp-table td{min-width:0;box-sizing:border-box}
+#interp-table th{white-space:normal;overflow-wrap:anywhere}
+#interp-table td.nm,#interp-table td.ag,#interp-table td.pt,#interp-table td.pre{white-space:normal;overflow-wrap:anywhere;word-break:normal}
+#interp-table td.nm{min-width:0}
+#interp-table td.ag{min-width:0}
+#interp-table td.pt{min-width:0}
+#interp-table td.pre{min-width:0}
+#interp-table td.tm{min-width:0;white-space:pre-line;overflow-wrap:anywhere}
+#interp-table td.nw,#interp-table td.num{white-space:nowrap}
+#interp-table td:last-child,#interp-table th:last-child{min-width:0}
+#interp-table td:last-child{white-space:nowrap}
+#interp-table td:last-child .status-actions{width:100%;box-sizing:border-box;justify-content:space-between;gap:6px}
+#interp-table .status-actions .acts{gap:5px}
+#interp-table .status-actions .btn{padding-left:7px;padding-right:7px}
+@media(max-width:1200px){#interp-table table{min-width:1050px}}
+.status-actions .acts{gap:8px}
+.empty{color:var(--ink-2);padding:20px 4px;text-align:center}
+.banner{border:1px dashed var(--line);background:var(--surface);border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between}
+.banner.err{border-color:var(--danger);color:var(--danger)}
+.row{display:grid;grid-template-columns:minmax(70px,auto) 1fr auto;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.bar{height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--interp);border-radius:4px}
+.bar i.dim2{opacity:.55}
+.bar i.l{background:var(--lect)}
+.row .val{font-family:var(--mono);font-size:13px;text-align:right;white-space:nowrap}
+.row .lab{overflow-wrap:anywhere}
+.heads{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+.heads .t{font-family:var(--display);font-size:18px;font-weight:700}
+.heads .tot{font-family:var(--mono);font-size:15px;font-weight:500}
+svg.chart{display:block;width:100%;height:auto}
+.gl{stroke:var(--line);stroke-width:1}
+.b-i{fill:var(--interp)}.b-l{fill:var(--lect)}
+.tk{fill:var(--ink-2);font:11px var(--mono)}
+.tk.cur{fill:var(--ink);font-weight:500}
+.pk{fill:var(--ink);font:500 11px var(--mono)}
+.ov{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:flex-start;justify-content:center;overflow:auto;z-index:20;
+  padding-block:max(24px,env(safe-area-inset-top,0px)) max(24px,env(safe-area-inset-bottom,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.sheet{background:var(--surface);border-radius:12px;width:100%;max-width:700px;padding:20px;border:1px solid var(--line)}
+.sheet h2{font-family:var(--display);font-size:19px;margin-bottom:14px}
+.fg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.fg label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--ink-2);min-width:0}
+.fg label.chk{flex-direction:row;align-items:center;gap:8px;color:var(--ink);font-size:13px}
+.fg .full{grid-column:1/-1}
+.fg input[type=text],.fg input[type=date],.fg input[type=number],.fg select,.fg textarea{width:100%;color:var(--ink)}
+.fbar{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-top:16px;flex-wrap:wrap}
+.ferr{color:var(--danger);margin-right:auto;font-size:13px}
+.hint{font-size:12px;color:var(--ink-2)}
+@media (max-width:560px){
+  .fg{grid-template-columns:1fr}
+  .fg input,.fg select,.fg textarea,.filters select,.filters input{font-size:16px}
+  h1{font-size:22px}
+  .tile.hero .v{font-size:26px}
+}
+@media (prefers-reduced-motion:no-preference){.btn,.navb{transition:background .12s,color .12s}}
+.u2{font-family:var(--body);font-size:11px;color:var(--ink-2);margin-left:2px}
+/* Financial columns use the same font as other table cells. */
+th.money-col{font-family:var(--body);font-size:12px}
+td.money-col{font-family:var(--body);font-size:14px}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <aside class="side">
+    <div class="brand"><span class="logo" aria-hidden="true">₩</span><span class="bt">통역 정산</span></div>
+    <nav class="nav" aria-label="메뉴">
+      <button class="navb" data-act="tab" data-tab="summary" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>대시보드</button>
+      <button class="navb" data-act="tab" data-tab="interp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 13h18"/></svg>업무 내역</button>
+      <button class="navb" data-act="tab" data-tab="lect"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v17H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M8 7h8M8 11h6"/></svg>강의 내역</button>
+      <button class="navb" data-act="tab" data-tab="data"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M7 4 4 7M7 4l3 3M17 20V4M17 20l-3-3M17 20l3-3"/></svg>데이터·백업</button>
+    </nav>
+    <div class="side-foot">입력한 내역은 이 브라우저에만 저장됩니다.</div>
+  </aside>
+
+<main class="main">
+  <div class="top">
+    <div>
+      <h1 id="page-title">업무·수입 요약</h1>
+      <p class="sub" id="page-sub">업무와 강의 수입을 한눈에 확인하세요.</p>
+    </div>
+    <div class="ctl">
+      <button class="btn pi" data-act="add-i" id="add-i">+ 업무 추가</button>
+      <button class="btn pl" data-act="add-l" id="add-l">+ 강의 추가</button>
+    </div>
+  </div>
+
+  <div class="years" id="years" role="tablist" aria-label="연도"></div>
+
+  <div id="banner"></div>
+
+  <section id="p-summary" class="stack">
+    <div class="tiles" id="tiles"></div>
+    <div class="mix">
+      <div class="card">
+        <div class="cardhead"><h2 id="chart-title">월별 수입</h2>
+          <div class="legend"><span><i style="background:var(--interp)"></i>업무(통역·번역)</span><span><i style="background:var(--lect)"></i>강의</span></div>
+        </div>
+        <div id="chart"></div>
+        <p class="hint" id="chart-note" hidden></p>
+      </div>
+      <div class="rcol" id="rcol"></div>
+    </div>
+    <div class="card">
+      <h2>월별 정산표</h2>
+      <div class="tbl-wrap" id="monthly"></div>
+    </div>
+  </section>
+
+  <section id="p-interp" hidden>
+    <div class="heads"><span class="t" id="i-title"></span><span class="tot" id="i-total"></span></div>
+    <div class="filters">
+      <select id="i-month" aria-label="월"><option value="all">전체 월</option></select>
+      <select id="i-mode" aria-label="업무"><option value="all">업무 전체</option><option>동시</option><option>순차</option><option>번역</option></select>
+      <select id="i-status" aria-label="정산 상태"><option value="all">정산·미정산 전체</option><option>미정산</option><option>정산</option></select>
+      <input type="search" id="i-q" placeholder="에이전시, 행사명, 파트너, 비고 검색">
+    </div>
+    <div class="card"><div class="tbl-wrap" id="interp-table"></div></div>
+  </section>
+
+  <section id="p-lect" hidden class="stack">
+    <div class="tiles" id="l-tiles"></div>
+    <div class="filters">
+      <select id="l-month" aria-label="월"><option value="all">전체 월</option></select>
+      <select id="l-status" aria-label="정산 상태"><option value="all">정산·미정산 전체</option><option>미정산</option><option>정산</option></select>
+      <input type="search" id="l-q" placeholder="강의명, 기관 검색">
+    </div>
+    <div class="card"><div class="tbl-wrap" id="lect-table"></div></div>
+  </section>
+
+  <section class="card" id="p-data" hidden>
+    <h2>데이터 관리</h2>
+    <p class="hint" style="margin:0 0 10px">입력한 내역은 이 브라우저에만 저장됩니다. 사이트 데이터를 지우거나 다른 기기에서 열면 보이지 않으니, 주기적으로 백업 파일을 저장해 두세요.</p>
+    <div class="ctl">
+      <button class="btn" data-act="backup">백업 저장 (JSON)</button>
+      <button class="btn" data-act="restore">백업 불러오기</button>
+      <button class="btn" data-act="export-i">업무 내역 CSV</button>
+      <button class="btn" data-act="export-l">강의료 CSV</button>
+      <input type="file" id="restore-file" accept=".json,application/json" hidden>
+    </div>
+  </section>
+</main>
+</div>
+
+<div class="ov" id="ov" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+<datalist id="dl-agency"></datalist>
+<datalist id="dl-org"></datalist>
+
+<script>
+(function(){
+  var state={year:new Date().getFullYear(),tab:'summary',interp:[],lect:[],meta:{},del:null,form:null,pendingRestore:null,restoreErr:false,addingYear:false,yearErr:''};
+  var KEY='interpreter-settlement-public-v4',OLD_KEY='interpreter-settlement-v2',canStore=true;
+  var ST=['미정산','정산'];
+  var RATE_COMM=0.15,RATE_TAX=0.033;
+  var WD='일월화수목금토';
+  var nf=new Intl.NumberFormat('ko-KR');
+  function $(id){return document.getElementById(id)}
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+  function num(v){var n=Number(v);return isFinite(n)?n:0}
+  function won(n){return nf.format(Math.round(n))}
+  function wonU(n){return won(n)+'<span class="u">원</span>'}
+  function wonS(n){return won(n)+'<span class="u2">원</span>'}
+  function settled(r){return r.status==='정산'}
+  function dash(n,f){return n?f(n):'<span class="dim">–</span>'}
+  function short(n){if(n>=1e8)return (n/1e8).toFixed(1).replace(/\.0$/,'')+'억';if(n>=1e4)return nf.format(Math.round(n/1e4))+'만';return String(n)}
+  function pct(a,b){return b>0?(a/b*100).toFixed(2)+'%':'0.00%'}
+  function md(d){return d.slice(5,7)+'.'+d.slice(8,10)}
+  function fmtRange(a,b){
+    if(!a)return '';
+    if(a.slice(5,7)==='00')return '월 미지정';
+    if(b&&b!==a)return md(a)+' ~ '+md(b);
+    var dt=new Date(a+'T00:00:00');return md(a)+' ('+WD[dt.getDay()]+')';
+  }
+  function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+  function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+  function byDateAsc(a,b){return (a.date||'').localeCompare(b.date||'')}
+  function inYear(r){return (r.date||'').indexOf(String(state.year))===0}
+  function sum(list,f){return list.reduce(function(s,r){return s+num(r[f])},0)}
+  function monthOf(r){return +(r.date||'').slice(5,7)}
+
+  /* ---------- storage ---------- */
+  function persist(){try{localStorage.setItem(KEY,JSON.stringify({interp:state.interp,lect:state.lect,meta:state.meta}));canStore=true}catch(e){canStore=false}}
+  function load(){try{var s=localStorage.getItem(KEY);if(s){var o=JSON.parse(s);if(o&&Array.isArray(o.interp)&&Array.isArray(o.lect))return o}}catch(e){canStore=false}return null}
+
+  /* 엑셀 파일(2024·2025년 업무 내역)에서 옮겨 온 내역. 버전이 오르면 새 내역만 한 번 추가됩니다. */
+  var PRELOAD_V=2;
+  var PRELOAD={"interp":[],"lect":[]};
+  /* 버전이 오를 때 이미 저장된 내역에 반영할 보정값. 비어 있는 칸만 채우고 직접 고친 값은 건드리지 않습니다. */
+  var PATCHES=[{v:2,items:[{"id":"p24-18","set":{"dateEnd":"2024-06-16"}},{"id":"p24-32","set":{"dateEnd":"2024-10-31"}},{"id":"p24-35","set":{"dateEnd":"2024-11-30"}}]}];
+  function applyPreload(){
+    var cur=state.meta.preload||0;
+    if(cur>=PRELOAD_V)return;
+    if(cur===0){
+      var have={};state.interp.concat(state.lect).forEach(function(r){have[r.id]=1});
+      PRELOAD.interp.forEach(function(r){if(!have[r.id])state.interp.push(Object.assign({},r))});
+      PRELOAD.lect.forEach(function(r){if(!have[r.id])state.lect.push(Object.assign({},r))});
+    }else{
+      PATCHES.forEach(function(pt){
+        if(pt.v<=cur)return;
+        pt.items.forEach(function(it){
+          var rec=state.interp.concat(state.lect).filter(function(r){return r.id===it.id})[0];
+          if(!rec)return;
+          Object.keys(it.set).forEach(function(k){if(rec[k]===''||rec[k]==null)rec[k]=it.set[k]});
+        });
+      });
+    }
+    state.meta.preload=PRELOAD_V;persist();
+  }
+
+  /* ---------- files ---------- */
+  function download(name,text,type){
+    var b=new Blob([text],{type:type}),u=URL.createObjectURL(b),a=document.createElement('a');
+    a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(function(){URL.revokeObjectURL(u)},1500);
+  }
+  function csvCell(v){v=String(v==null?'':v);return /[",\r\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+  function exportCsv(kind){
+    var rows=(kind==='i'?state.interp:state.lect).slice().sort(byDateAsc),head,keys;
+    if(kind==='i'){head=['일자','종료일','에이전시','행사명','업무','파트너','시간','공급가액','수수료','감수료','공제 후 금액','비고','장소','주제','정산'];keys=['date','dateEnd','agency','name','mode','partner','time','gross','comm','rev','net','note','venue','topic','status']}
+    else{head=['일자','기관','강의명','시수','시간당 강의료','강의료','정산','메모'];keys=['date','org','name','hours','rate','fee','status','memo']}
+    var lines=[head.map(csvCell).join(',')];
+    rows.forEach(function(r){lines.push(keys.map(function(k){return csvCell(r[k])}).join(','))});
+    download((kind==='i'?'업무내역_':'강의료_')+todayStr()+'.csv','﻿'+lines.join('\r\n'),'text/csv;charset=utf-8');
+  }
+  function backup(){download('통역정산_백업_'+todayStr()+'.json',JSON.stringify({version:2,exportedAt:new Date().toISOString(),interp:state.interp,lect:state.lect,meta:state.meta},null,1),'application/json')}
+  function readBackup(file){
+    var rd=new FileReader();
+    rd.onload=function(){
+      try{var o=JSON.parse(String(rd.result));if(!o||!Array.isArray(o.interp)||!Array.isArray(o.lect)||o.version!==2)throw new Error('x');state.pendingRestore=o;state.restoreErr=false}
+      catch(e){state.pendingRestore=null;state.restoreErr=true}
+      renderBanner();
+    };
+    rd.readAsText(file);
+  }
+  function applyRestore(){
+    var p=state.pendingRestore;if(!p)return;
+    function fix(list){return list.map(function(r,i){r=Object.assign({},r);if(!r.id)r.id=uid()+i;return r})}
+    state.interp=fix(p.interp);state.lect=fix(p.lect);state.meta=p.meta||{};state.pendingRestore=null;
+    pickYear();persist();renderAll();
+  }
+
+  /* ---------- aggregates ---------- */
+  function monthly(){
+    var m=[];for(var i=0;i<12;i++)m.push({ni:0,gi:0,fi:0,nl:0,fl:0});
+    var un=0;
+    state.interp.filter(inYear).forEach(function(r){var k=monthOf(r)-1;if(k>=0&&k<12&&r.status==='정산'){m[k].ni++;m[k].gi+=num(r.gross);m[k].fi+=num(r.net)}});
+    state.lect.filter(inYear).forEach(function(r){var k=monthOf(r)-1;if(k>=0&&k<12){m[k].nl++;if(r.status==='정산')m[k].fl+=num(r.fee)}else if(r.status==='정산')un+=num(r.fee)});
+    m.un=un;return m;
+  }
+  function totals(list){return {g:sum(list,'gross'),c:sum(list,'comm'),r:sum(list,'rev'),n:sum(list,'net')}}
+
+  /* ---------- summary ---------- */
+  function renderTiles(){
+    var yi=state.interp.filter(inYear),yl=state.lect.filter(inYear);
+    var yiPaid=yi.filter(settled),ylPaid=yl.filter(settled);
+    var ti=sum(yi.filter(function(r){return r.status==='정산'}),'net'),tl=sum(yl.filter(function(r){return r.status==='정산'}),'fee');
+    var pend=yi.filter(function(r){return r.status!=='정산'}).map(function(r){return num(r.net)}).concat(yl.filter(function(r){return r.status!=='정산'}).map(function(r){return num(r.fee)}));
+    var pendSum=pend.reduce(function(a,b){return a+b},0);
+    $('tiles').innerHTML=
+      '<div class="tile hero"><div class="k">'+state.year+'년 총수입</div><div class="v">'+wonU(ti+tl)+'</div><div class="n">업무 + 강의, 공제 후 금액 기준</div></div>'+
+      '<div class="tile"><div class="k">업무 총계 (통역·번역)</div><div class="v">'+wonU(ti)+'</div><div class="n">정산 '+yiPaid.length+'건 · 공급가액 '+won(sum(yiPaid,'gross'))+'원</div></div>'+
+      '<div class="tile"><div class="k">강의료</div><div class="v">'+wonU(tl)+'</div><div class="n">정산 '+ylPaid.length+'건</div></div>'+
+      '<div class="tile"><div class="k">미정산</div><div class="v">'+wonU(pendSum)+'</div><div class="n">'+pend.filter(function(x){return true}).length+'건 중 정산 전 금액</div></div>';
+    var cnt=yi.filter(function(r){return r.status!=='정산'}).length+yl.filter(function(r){return r.status!=='정산'}).length;
+    $('tiles').lastChild.querySelector('.n').textContent=cnt+'건';
+  }
+
+  function chartH(hasNote){
+    var rc=$('rcol'),h=240;
+    try{
+      if(rc&&rc.children.length&&window.matchMedia&&window.matchMedia('(min-width:1101px)').matches){
+        var nat=0;Array.prototype.forEach.call(rc.children,function(c){nat+=c.offsetHeight});
+        nat+=14*(rc.children.length-1);
+        if(nat>0)h=Math.max(240,Math.min(560,nat-32-40-(hasNote?44:0)));
+      }
+    }catch(e){}
+    return h;
+  }
+  function renderChart(){
+    $('chart-title').textContent=state.year+'년 월별 수입';
+    var m=monthly(),tot=m.map(function(x){return x.fi+x.fl}),mx=Math.max.apply(null,tot);
+    var box=$('chart'),note=$('chart-note');
+    if(m.un>0){note.hidden=false;note.textContent='월 미지정 강의료 '+won(m.un)+'원은 그래프에 없고 연간 합계에만 포함됩니다.'}else note.hidden=true;
+    if(mx<=0){box.innerHTML='<p class="empty">'+state.year+'년에 월별로 기록된 수입이 없습니다.</p>';return}
+    var W=Math.max(300,box.clientWidth||620),H=chartH(m.un>0),L=54,R=6,T=18,B=24,pw=W-L-R,ph=H-T-B;
+    var steps=[1e5,2e5,5e5,1e6,2e6,3e6,5e6,1e7,2e7,5e7,1e8],step=1e8;
+    for(var s=0;s<steps.length;s++){if(mx/steps[s]<=5){step=steps[s];break}}
+    var top=Math.ceil(mx/step)*step,n=top/step;
+    function y(v){return T+ph-(v/top)*ph}
+    var out='<svg class="chart" viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" role="img" aria-label="월별 수입 막대 그래프">';
+    for(var g=0;g<=n;g++){var v=g*step,yy=y(v);
+      out+='<line class="gl" x1="'+L+'" x2="'+(W-R)+'" y1="'+yy+'" y2="'+yy+'"/><text class="tk" x="'+(L-6)+'" y="'+(yy+4)+'" text-anchor="end">'+short(v)+'</text>';}
+    var band=pw/12,bw=Math.min(40,band*.6),curM=(state.year===new Date().getFullYear())?new Date().getMonth():-1;
+    function lab(v){return String(Math.max(1,Math.round(v/1e4)))+'만'}
+    for(var i=0;i<12;i++){
+      var x=L+i*band+(band-bw)/2,hi=ph*m[i].fi/top,hl=ph*m[i].fl/top;
+      var tip=(i+1)+'월 합계 '+won(tot[i])+'원 (업무 '+won(m[i].fi)+' / 강의 '+won(m[i].fl)+')';
+      out+='<g><title>'+esc(tip)+'</title>';
+      if(hi>0)out+='<rect class="b-i" x="'+x+'" y="'+(T+ph-hi)+'" width="'+bw+'" height="'+hi+'"/>';
+      if(hl>0)out+='<rect class="b-l" x="'+x+'" y="'+(T+ph-hi-hl)+'" width="'+bw+'" height="'+hl+'"/>';
+      if(tot[i]>0)out+='<text class="vl" x="'+(L+i*band+band/2)+'" y="'+(y(tot[i])-4)+'" text-anchor="middle">'+lab(tot[i])+'</text>';
+      out+='<rect x="'+(L+i*band)+'" y="'+T+'" width="'+band+'" height="'+ph+'" fill="transparent"/></g>';
+      out+='<text class="tk'+(i===curM?' cur':'')+'" x="'+(L+i*band+band/2)+'" y="'+(H-8)+'" text-anchor="middle">'+(band<34?(i+1):(i+1)+'월')+'</text>';
+    }
+    out+='</svg>';
+    box.innerHTML=out;
+  }
+
+  function renderMonthly(){
+    var m=monthly(),curM=(state.year===new Date().getFullYear())?new Date().getMonth():-1,cum=0;
+    var tn=0,tg=0,tf=0,tl=0;
+    var h='<table><thead><tr><th>월</th><th class="num">정산 건수</th><th class="num">공급가액</th><th class="num">업무 정산액</th><th class="num">강의료</th><th class="num">월 합계</th><th class="num">누계</th></tr></thead><tbody>';
+    for(var i=0;i<12;i++){
+      var x=m[i],t=x.fi+x.fl;cum+=t;tn+=x.ni;tg+=x.gi;tf+=x.fi;tl+=x.fl;
+      h+='<tr'+(i===curM?' class="cur"':'')+'><td class="nw">'+(i+1)+'월</td><td class="num">'+dash(x.ni,String)+'</td><td class="num">'+dash(x.gi,wonS)+'</td><td class="num">'+dash(x.fi,wonS)+'</td><td class="num">'+dash(x.fl,wonS)+'</td><td class="num">'+dash(t,wonS)+'</td><td class="num">'+dash(cum,wonS)+'</td></tr>';
+    }
+    if(m.un>0){h+='<tr><td class="nw">월 미지정</td><td class="num"><span class="dim">–</span></td><td class="num"><span class="dim">–</span></td><td class="num"><span class="dim">–</span></td><td class="num">'+wonS(m.un)+'</td><td class="num">'+wonS(m.un)+'</td><td class="num"></td></tr>'}
+    h+='</tbody><tfoot><tr><td>연간</td><td class="num">'+tn+'</td><td class="num">'+wonS(tg)+'</td><td class="num">'+wonS(tf)+'</td><td class="num">'+wonS(tl+m.un)+'</td><td class="num">'+wonS(tf+tl+m.un)+'</td><td class="num"></td></tr></tfoot></table>';
+    $('monthly').innerHTML=h;
+  }
+
+  function donut(slices,top,sub,label){
+    var tot=slices.reduce(function(a,x){return a+x.v},0);
+    if(tot<=0)return '<p class="empty">내역 없음</p>';
+    var R=46,C=2*Math.PI*R,live=slices.filter(function(x){return x.v>0}),gap=live.length>1?1.6:0,cum=0;
+    var out='<svg viewBox="0 0 120 120" role="img" aria-label="'+esc(label)+'"><circle class="track" cx="60" cy="60" r="'+R+'" fill="none" stroke-width="16"/>';
+    live.forEach(function(x){
+      var f=x.v/tot,len=Math.max(f*C-gap,0.01);
+      out+='<circle cx="60" cy="60" r="'+R+'" fill="none" stroke="'+x.color+'" stroke-width="16" stroke-dasharray="'+len+' '+(C-len)+'" stroke-dashoffset="'+(-cum*C)+'" transform="rotate(-90 60 60)"><title>'+esc(x.label+' '+pct(x.v,tot)+' · '+x.tip)+'</title></circle>';
+      cum+=f;
+    });
+    out+='<text class="dv" x="60" y="61" text-anchor="middle" style="font-size:'+(String(top).length>4?13:17)+'px">'+esc(top)+'</text><text class="ds" x="60" y="76" text-anchor="middle">'+esc(sub)+'</text></svg>';
+    var mx=Math.max.apply(null,live.map(function(x){return x.v}));
+    out+='<div class="lg">'+live.map(function(x){
+      var tt=esc(x.label+' · '+x.tip);
+      return '<i class="sw" style="background:'+x.color+'"></i>'+
+        '<span class="nm" title="'+tt+'">'+esc(x.label)+'</span>'+
+        '<span class="bt" aria-hidden="true" title="'+tt+'"><i style="width:'+(x.v/mx*100).toFixed(1)+'%;background:'+x.color+'"></i></span>'+
+        '<span class="sv">'+esc(x.sv||'')+'</span>'+
+        '<span class="pc" title="'+tt+'">'+pct(x.v,tot)+'</span>';
+    }).join('')+'</div>';
+    return out;
+  }
+  function dnBlock(title,basis,html){return '<div class="card dcard"><h3>'+title+'<span>'+basis+'</span></h3><div class="dbody">'+html+'</div></div>'}
+  function renderBreakdowns(){
+    var yi=state.interp.filter(inYear),box=$('rcol');
+    if(!yi.length){box.innerHTML='<div class="card"><p class="empty">'+state.year+'년 업무 내역이 없습니다.</p></div>';return}
+    function tip(list){var paid=list.filter(function(r){return r.status==='정산'});return list.length+'건 · 정산 '+won(sum(paid,'net'))+'원'}
+    var tong=yi.filter(function(r){return r.mode!=='번역'}),tr=yi.filter(function(r){return r.mode==='번역'});
+    var sim=tong.filter(function(r){return r.mode==='동시'}),seq=tong.filter(function(r){return r.mode==='순차'});
+    var h=dnBlock('통역 / 번역','건수 기준',donut([{label:'통역',v:tong.length,color:'var(--c1)',tip:tip(tong),sv:tong.length+'건'},{label:'번역',v:tr.length,color:'var(--c2)',tip:tip(tr),sv:tr.length+'건'}],String(yi.length),'건','통역과 번역 비율'));
+    h+=dnBlock('통역별','동시·순차, 건수 기준',donut([{label:'동시',v:sim.length,color:'var(--c1)',tip:tip(sim),sv:sim.length+'건'},{label:'순차',v:seq.length,color:'var(--c3)',tip:tip(seq),sv:seq.length+'건'}],String(tong.length),'건','동시통역과 순차통역 비율'));
+    var g={};yi.forEach(function(r){var k=(r.agency||'').trim()||'(미기재)';g[k]=g[k]||[];g[k].push(r)});
+    var arr=Object.keys(g).map(function(k){var paid=g[k].filter(function(r){return r.status==='정산'});return {k:k,list:g[k],f:sum(paid,'net')}}).sort(function(a,b){return b.f-a.f});
+    var cols=['var(--c1)','var(--c2)','var(--c3)','var(--c4)','var(--c5)'],sl=arr.slice(0,5).map(function(o,i){return {label:o.k,v:o.f,color:cols[i],tip:tip(o.list),sv:short(o.f)+'원'}}).filter(function(o){return o.v>0});
+    var rest=arr.slice(5);
+    if(rest.length){var rl=[].concat.apply([],rest.map(function(o){return o.list}));var paidRest=rl.filter(function(r){return r.status==='정산'});if(sum(paidRest,'net')>0)sl.push({label:'기타 '+rest.length+'곳',v:sum(paidRest,'net'),color:'var(--c6)',tip:tip(rl),sv:short(sum(paidRest,'net'))+'원'})}
+    h+=dnBlock('에이전시별','정산 완료 금액 기준',donut(sl,short(sum(yi.filter(function(r){return r.status==='정산'}),'net')),'원','에이전시별 정산 완료 금액 비율'));
+    box.innerHTML=h;
+  }
+
+  /* ---------- tables ---------- */
+  function statusBtn(kind,r){
+    var s=r.status==='정산'?1:0;
+    return '<button class="pill st'+s+'" data-act="cycle" data-kind="'+kind+'" data-id="'+esc(r.id)+'" title="눌러서 정산 상태 변경">'+ST[s]+'</button>';
+  }
+  function actCell(kind,r){
+    if(state.del&&state.del.kind===kind&&state.del.id===r.id){
+      return '<div class="acts"><span class="mut">삭제할까요?</span><button class="btn sm danger" data-act="del-yes">삭제</button><button class="btn sm" data-act="del-no">취소</button></div>';
+    }
+    return '<div class="acts"><button class="btn sm" data-act="edit" data-kind="'+kind+'" data-id="'+esc(r.id)+'">수정</button><button class="btn sm" data-act="del" data-kind="'+kind+'" data-id="'+esc(r.id)+'">삭제</button></div>';
+  }
+  function modePill(m){return '<span class="pill '+(m==='동시'?'sim':m==='순차'?'con':'tr')+'">'+esc(m||'')+'</span>'}
+
+  function interpRow(r){
+    var sub=[r.topic,r.venue].filter(Boolean).join(' · ');
+    return '<tr><td class="nw">'+fmtRange(r.date,r.dateEnd)+'</td>'+
+      '<td class="nm"><div>'+esc(r.name)+'</div>'+(sub?'<div class="mut">'+esc(sub)+'</div>':'')+'</td>'+
+      '<td class="nw">'+modePill(r.mode)+'</td>'+
+      '<td class="tm">'+(r.time?esc(r.time):'<span class="dim">–</span>')+'</td>'+
+      '<td class="pt">'+(r.partner?esc(r.partner):'<span class="dim">–</span>')+'</td>'+
+      '<td class="num money-col">'+dash(num(r.gross),won)+'</td><td class="num money-col">'+dash(num(r.comm),won)+'</td><td class="num money-col">'+dash(num(r.rev),won)+'</td>'+
+      '<td class="num money-col"><strong>'+won(num(r.net))+'</strong></td>'+
+      '<td class="ag">'+esc(r.agency)+'</td>'+
+      '<td class="pre">'+esc(r.note)+'</td>'+
+      '<td><div class="acts status-actions">'+statusBtn('i',r)+actCell('i',r)+'</div></td></tr>';
+  }
+  function sumRow(label,t,cls){
+    return '<tr class="'+cls+'"><td colspan="5" class="lab">'+label+'</td><td class="num">'+won(t.g)+'</td><td class="num">'+won(t.c)+'</td><td class="num">'+won(t.r)+'</td><td class="num">'+won(t.n)+'</td><td colspan="3"></td></tr>';
+  }
+
+  function renderInterp(){
+    var yi=state.interp.filter(inYear);
+    $('i-title').textContent=state.year+'년 업무 내역';
+    $('i-total').innerHTML='업무 합계 <strong>'+won(sum(yi.filter(function(r){return r.status==='정산'}),'net'))+'원</strong>';
+    var box=$('interp-table');
+    if(!state.interp.length){box.innerHTML='<p class="empty">아직 기록된 업무가 없습니다.<br>오른쪽 위 ‘+ 업무 추가’에서 첫 행사를 입력하세요.</p>';return}
+    var mo=$('i-month').value,md_=$('i-mode').value,st=$('i-status').value,q=$('i-q').value.trim().toLowerCase();
+    var rows=yi.filter(function(r){
+      if(mo!=='all'&&String(monthOf(r)).padStart(2,'0')!==mo)return false;
+      if(md_!=='all'&&r.mode!==md_)return false;
+      if(st!=='all'&&(r.status||'미정산')!==st)return false;
+      if(q){var hay=[r.agency,r.name,r.partner,r.note,r.venue,r.topic].join(' ').toLowerCase();if(hay.indexOf(q)<0)return false}
+      return true;
+    }).sort(byDateAsc);
+    if(!rows.length){box.innerHTML='<p class="empty">'+state.year+'년에 조건과 일치하는 내역이 없습니다.</p>';return}
+    var h='<table><colgroup><col style="width:7%"><col style="width:14%"><col style="width:6%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:6%"><col style="width:6%"><col style="width:9%"><col style="width:8%"><col style="width:8%"><col style="width:12%"></colgroup><thead><tr><th>일자</th><th>행사명</th><th>업무</th><th>시간</th><th>파트너</th><th class="num money-col">공급가액</th><th class="num money-col">수수료</th><th class="num money-col">감수료</th><th class="num money-col">공제 후 금액</th><th>에이전시</th><th>비고</th><th>정산</th></tr></thead><tbody>';
+    [['상반기 (1–6월)',function(r){return monthOf(r)<=6},'상반기'],['하반기 (7–12월)',function(r){return monthOf(r)>6},'하반기']].forEach(function(hf){
+      var part=rows.filter(hf[1]);if(!part.length)return;
+      h+='<tr class="band"><td colspan="12">'+hf[0]+' · '+part.length+'건</td></tr>';
+      part.forEach(function(r){h+=interpRow(r)});
+      h+=sumRow(hf[2]+' 합계',totals(part.filter(function(r){return r.status==='정산'})),'subt');
+    });
+    h+='</tbody><tfoot>'+sumRow('총계 · '+rows.length+'건',totals(rows.filter(function(r){return r.status==='정산'})),'')+'</tfoot></table>';
+    box.innerHTML=h;
+  }
+
+  function renderLect(){
+    var yl=state.lect.filter(inYear);
+    var g={};yl.forEach(function(r){var k=(r.org||'').trim()||'(미기재)';g[k]=g[k]||{f:0,n:0};g[k].f+=(r.status==='정산'?num(r.fee):0);g[k].n++});
+    var orgs=Object.keys(g).map(function(k){return {k:k,f:g[k].f,n:g[k].n}}).sort(function(a,b){return b.f-a.f});
+    var pend=yl.filter(function(r){return r.status!=='정산'});
+    $('l-tiles').innerHTML='<div class="tile hero"><div class="k">'+state.year+'년 강의료</div><div class="v">'+wonU(sum(yl.filter(function(r){return r.status==='정산'}),'fee'))+'</div><div class="n">'+yl.length+'건</div></div>'+
+      orgs.map(function(o){return '<div class="tile"><div class="k">'+esc(o.k)+'</div><div class="v">'+wonU(o.f)+'</div><div class="n">'+o.n+'건</div></div>'}).join('')+
+      '<div class="tile"><div class="k">미정산</div><div class="v">'+wonU(sum(pend,'fee'))+'</div><div class="n">'+pend.length+'건</div></div>';
+    var box=$('lect-table');
+    if(!state.lect.length){box.innerHTML='<p class="empty">아직 기록된 강의가 없습니다.<br>오른쪽 위 ‘+ 강의 추가’에서 강의료를 입력하세요.</p>';return}
+    var mo=$('l-month').value,st=$('l-status').value,q=$('l-q').value.trim().toLowerCase();
+    var rows=yl.filter(function(r){
+      if(mo!=='all'&&String(monthOf(r)).padStart(2,'0')!==mo)return false;
+      if(st!=='all'&&(r.status||'미정산')!==st)return false;
+      if(q){var hay=[r.name,r.org,r.memo].join(' ').toLowerCase();if(hay.indexOf(q)<0)return false}
+      return true;
+    }).sort(byDateAsc);
+    if(!rows.length){box.innerHTML='<p class="empty">'+state.year+'년에 조건과 일치하는 강의가 없습니다.</p>';return}
+    var h='<table><thead><tr><th>일자</th><th>기관</th><th>강의명</th><th class="num">시수</th><th class="num">시간당 강의료</th><th class="num">강의료</th><th>메모</th><th>정산</th><th></th></tr></thead><tbody>';
+    rows.forEach(function(r){
+      h+='<tr><td class="nw">'+fmtRange(r.date)+'</td><td>'+esc(r.org)+'</td><td class="nm">'+esc(r.name)+'</td><td class="num">'+dash(num(r.hours),function(v){return nf.format(v)})+'</td><td class="num">'+dash(num(r.rate),won)+'</td><td class="num"><strong>'+won(num(r.fee))+'</strong></td><td class="pre">'+esc(r.memo)+'</td><td>'+statusBtn('l',r)+'</td><td>'+actCell('l',r)+'</td></tr>';
+    });
+    h+='</tbody><tfoot><tr><td colspan="3">'+rows.length+'건 합계</td><td class="num">'+nf.format(sum(rows,'hours'))+'</td><td></td><td class="num">'+won(sum(rows.filter(function(r){return r.status==='정산'}),'fee'))+'</td><td colspan="3"></td></tr></tfoot></table>';
+    box.innerHTML='<div class="card"><div class="tbl-wrap">'+h+'</div></div>';
+  }
+
+  /* ---------- chrome ---------- */
+  function pickYear(){
+    var ys=state.interp.concat(state.lect).map(function(r){return +(r.date||'').slice(0,4)}).filter(function(y){return y>2000});
+    state.year=ys.length?Math.max.apply(null,ys):new Date().getFullYear();
+  }
+  function yearList(){
+    var cy=new Date().getFullYear(),ys={};ys[cy]=1;ys[cy-1]=1;ys[state.year]=1;
+    (state.meta.years||[]).forEach(function(y){ys[y]=1});
+    state.interp.concat(state.lect).forEach(function(r){var y=(r.date||'').slice(0,4);if(/^\d{4}$/.test(y))ys[y]=1});
+    return Object.keys(ys).map(Number).sort(function(a,b){return a-b});
+  }
+  function renderYear(){
+    var h=yearList().map(function(y){return '<button class="ytab" role="tab" data-act="year" data-y="'+y+'" aria-selected="'+(y===state.year)+'">'+y+'년</button>'}).join('');
+    if(state.addingYear){
+      h+='<span class="yadd"><input type="number" id="y-new" min="2000" max="2100" placeholder="예: 2024" aria-label="추가할 연도"><button class="btn sm pi" data-act="year-add">추가</button><button class="btn sm" data-act="year-cancel">취소</button></span>';
+      if(state.yearErr)h+='<span class="ferr" role="alert">'+esc(state.yearErr)+'</span>';
+    }else h+='<button class="ytab add" data-act="year-new">+ 연도</button>';
+    $('years').innerHTML=h;
+    if(state.addingYear){var yi=$('y-new');if(yi)yi.focus()}
+  }
+  function renderBanner(){
+    var h='';
+    if(!canStore)h+='<div class="banner err"><span>이 브라우저가 저장을 막고 있어 입력한 내역이 창을 닫으면 사라집니다. 시크릿 모드를 끄거나 사이트 데이터 저장을 허용해 주세요. 그 전까지는 아래 ‘백업 저장’을 자주 눌러 주세요.</span></div>';
+    if(state.restoreErr)h+='<div class="banner err"><span>백업 파일을 읽을 수 없습니다. 이 앱에서 저장한 JSON 파일인지 확인해 주세요.</span><button class="btn sm" data-act="restore-no">닫기</button></div>';
+    if(state.pendingRestore)h+='<div class="banner"><span>백업 파일(업무 '+state.pendingRestore.interp.length+'건, 강의 '+state.pendingRestore.lect.length+'건)로 현재 내역을 모두 덮어쓸까요?</span><span class="acts"><button class="btn sm danger" data-act="restore-yes">덮어쓰기</button><button class="btn sm" data-act="restore-no">취소</button></span></div>';
+    if(!state.interp.length&&!state.lect.length)h+='<div class="banner"><span>아직 입력된 내역이 없습니다. 오른쪽 위 ‘+ 업무 추가’, ‘+ 강의 추가’로 첫 내역을 입력하세요.</span></div>';
+    $('banner').innerHTML=h;
+  }
+  function renderAll(){renderYear();renderBanner();renderTiles();renderBreakdowns();renderChart();renderMonthly();renderInterp();renderLect()}
+  var PAGES={
+    summary:['업무·수입 요약','업무와 강의 수입을 한눈에 확인하세요.'],
+    interp:['업무 내역','통역·번역 업무를 상반기와 하반기로 나눠 봅니다.'],
+    lect:['강의 내역','기관별 강의 내역과 정산 상태를 확인합니다.'],
+    data:['데이터·백업','입력한 내역을 파일로 보관하거나 복원합니다.']
+  };
+  function setTab(t){
+    state.tab=t;
+    Object.keys(PAGES).forEach(function(k){$('p-'+k).hidden=(k!==t)});
+    document.querySelectorAll('.navb').forEach(function(b){if(b.dataset.tab===t)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
+    $('page-title').textContent=PAGES[t][0];$('page-sub').textContent=PAGES[t][1];
+    $('years').hidden=(t==='data');
+    try{window.scrollTo(0,0)}catch(e){}
+    if(t==='summary')renderChart();
+  }
+
+  /* ---------- form ---------- */
+  function opt(list,sel){return list.map(function(v){return '<option'+(v===sel?' selected':'')+'>'+v+'</option>'}).join('')}
+  function fillLists(){
+    var a={},o={};state.interp.forEach(function(r){if(r.agency)a[r.agency]=1});state.lect.forEach(function(r){if(r.org)o[r.org]=1});
+    $('dl-agency').innerHTML=Object.keys(a).map(function(v){return '<option value="'+esc(v)+'">'}).join('');
+    $('dl-org').innerHTML=Object.keys(o).map(function(v){return '<option value="'+esc(v)+'">'}).join('');
+  }
+  function autoNet(g,c,rv){return g>0?Math.round((g-c-rv)*(1-RATE_TAX)):''}
+  function openForm(kind,id,preset){
+    var rec=null;
+    if(id)rec=(kind==='i'?state.interp:state.lect).filter(function(r){return r.id===id})[0]||null;
+    var r=rec||preset||{};
+    fillLists();
+    state.form={kind:kind,id:id||null,commTouched:false,netTouched:false,feeTouched:false};
+    var f=state.form;
+    if(rec&&kind==='i'){
+      var g=num(r.gross);
+      f.commTouched=num(r.comm)!==Math.round(g*RATE_COMM);
+      f.netTouched=num(r.net)!==autoNet(g,num(r.comm),num(r.rev));
+    }
+    if(rec&&kind==='l')f.feeTouched=num(r.fee)!==Math.round(num(r.hours)*num(r.rate));
+    var h='';
+    if(kind==='i'){
+      h='<h2>'+(rec?'업무 내역 수정':'업무 내역 추가')+'</h2><div class="fg">'+
+      '<label>일자(시작)<input type="date" id="f-date" value="'+esc(r.date||todayStr())+'"></label>'+
+      '<label>종료일 (여러 날이면)<input type="date" id="f-end" value="'+esc(r.dateEnd||'')+'"></label>'+
+      '<label>에이전시<input type="text" id="f-agency" list="dl-agency" value="'+esc(r.agency||'')+'"></label>'+
+      '<label>업무<select id="f-mode">'+opt(['동시','순차','번역'],r.mode||'동시')+'</select></label>'+
+      '<label class="full">행사명<input type="text" id="f-name" value="'+esc(r.name||'')+'"></label>'+
+      '<label>파트너 선생님<input type="text" id="f-partner" value="'+esc(r.partner||'')+'"></label>'+
+      '<label>정산<select id="f-status">'+opt(ST,r.status||'미정산')+'</select></label>'+
+      '<label class="full">시간 (여러 줄 가능)<textarea id="f-time" rows="2">'+esc(r.time||'')+'</textarea></label>'+
+      '<label>공급가액(원)<input type="number" id="f-gross" inputmode="numeric" min="0" step="1000" value="'+(r.gross!=null?esc(r.gross):'')+'"></label>'+
+      '<label>수수료(원)<input type="number" id="f-comm" inputmode="numeric" min="0" step="1" value="'+(r.comm!=null?esc(r.comm):'')+'"></label>'+
+      '<label>감수료(원)<input type="number" id="f-rev" inputmode="numeric" min="0" step="1" value="'+(r.rev!=null?esc(r.rev):'')+'"></label>'+
+      '<label>공제 후 금액(원)<input type="number" id="f-net" inputmode="numeric" min="0" step="1" value="'+(r.net!=null?esc(r.net):'')+'"></label>'+
+      '<div class="hint full">수수료는 공급가액의 15%, 공제 후 금액은 (공급가액 − 수수료 − 감수료)에서 3.3%를 뺀 값으로 자동 입력됩니다. 직접 고친 칸은 그 값이 우선하고, 비우면 다시 자동 계산됩니다.</div>'+
+      '<label>장소 (선택)<input type="text" id="f-venue" value="'+esc(r.venue||'')+'"></label>'+
+      '<label>주제 (선택)<input type="text" id="f-topic" value="'+esc(r.topic||'')+'"></label>'+
+      '<label class="full">비고 (여러 줄 가능)<textarea id="f-note" rows="2">'+esc(r.note||'')+'</textarea></label></div>';
+    }else{
+      var yo=rec?(r.date||'').slice(5,7)==='00':false;
+      h='<h2>'+(rec?'강의 내역 수정':'강의 내역 추가')+'</h2><div class="fg">'+
+      '<label>기관<input type="text" id="f-org" list="dl-org" value="'+esc(r.org||'')+'"></label>'+
+      '<label>정산<select id="f-status">'+opt(ST,r.status||'미정산')+'</select></label>'+
+      '<label class="full">강의명<input type="text" id="f-name" value="'+esc(r.name||'')+'"></label>'+
+      '<label class="chk full"><input type="checkbox" id="f-yo"'+(yo?' checked':'')+'>월 미지정 (연간 합계 금액만 입력)</label>'+
+      '<label id="w-date"'+(yo?' hidden':'')+'>일자<input type="date" id="f-date" value="'+esc(yo?todayStr():(r.date||todayStr()))+'"></label>'+
+      '<label id="w-year"'+(yo?'':' hidden')+'>연도<input type="number" id="f-year" min="2000" max="2100" value="'+esc(yo?r.date.slice(0,4):state.year)+'"></label>'+
+      '<label>시수(시간, 선택)<input type="number" id="f-hours" inputmode="decimal" min="0" step="0.5" value="'+(r.hours!=null?esc(r.hours):'')+'"></label>'+
+      '<label>시간당 강의료(원, 선택)<input type="number" id="f-rate" inputmode="numeric" min="0" step="1000" value="'+(r.rate!=null?esc(r.rate):'')+'"></label>'+
+      '<label>강의료(원)<input type="number" id="f-fee" inputmode="numeric" min="0" step="1" value="'+(r.fee!=null?esc(r.fee):'')+'"></label>'+
+      '<label class="full">메모<input type="text" id="f-memo" value="'+esc(r.memo||'')+'"></label></div>';
+    }
+    h+='<div class="fbar"><span class="ferr" id="f-err" role="alert"></span><button class="btn" data-act="close">취소</button><button class="btn '+(kind==='i'?'pi':'pl')+'" data-act="save" id="f-save">저장</button></div>';
+    $('sheet').innerHTML=h;$('ov').hidden=false;
+    if(!rec){var fn=$('f-name')||$('f-agency');if(kind==='i'&&$('f-agency'))$('f-agency').focus();else if($('f-org'))$('f-org').focus()}
+  }
+  function closeForm(){state.form=null;$('ov').hidden=true;$('sheet').innerHTML=''}
+  function autoCalc(){
+    var f=state.form;if(!f)return;
+    if(f.kind==='i'){
+      var g=num($('f-gross').value);
+      if(!f.commTouched)$('f-comm').value=g>0?Math.round(g*RATE_COMM):'';
+      if(!f.netTouched)$('f-net').value=autoNet(g,num($('f-comm').value),num($('f-rev').value));
+    }else if(!f.feeTouched){
+      var q=num($('f-hours').value),rt=num($('f-rate').value);$('f-fee').value=(q&&rt)?Math.round(q*rt):'';
+    }
+  }
+  function save(){
+    var f=state.form;if(!f)return;
+    function g(id){var e=$(id);return e?e.value.trim():''}
+    var data,err='';
+    if(f.kind==='i'){
+      data={date:g('f-date'),dateEnd:g('f-end'),agency:g('f-agency'),name:g('f-name'),mode:g('f-mode'),partner:g('f-partner'),time:g('f-time'),gross:g('f-gross')===''?null:num(g('f-gross')),comm:num(g('f-comm')),rev:g('f-rev')===''?null:num(g('f-rev')),net:num(g('f-net')),note:g('f-note'),venue:g('f-venue'),topic:g('f-topic'),status:g('f-status')};
+      if(!data.date)err='일자를 입력하세요.';
+      else if(data.dateEnd&&data.dateEnd<data.date)err='종료일이 시작일보다 앞섭니다.';
+      else if(!data.name)err='행사명을 입력하세요.';
+      else if(data.net<=0&&num(data.gross)<=0)err='공급가액이나 공제 후 금액을 입력하세요.';
+    }else{
+      var yo=$('f-yo').checked,yr=g('f-year');
+      data={date:yo?(/^\d{4}$/.test(yr)?yr+'-00-00':''):g('f-date'),org:g('f-org'),name:g('f-name'),hours:g('f-hours')===''?null:num(g('f-hours')),rate:g('f-rate')===''?null:num(g('f-rate')),fee:num(g('f-fee')),memo:g('f-memo'),status:g('f-status')};
+      if(!data.date)err=yo?'연도를 4자리로 입력하세요.':'일자를 입력하세요.';
+      else if(!data.org)err='기관을 입력하세요.';
+      else if(!data.name)err='강의명을 입력하세요.';
+      else if(data.fee<=0)err='강의료를 입력하세요.';
+    }
+    if(err){$('f-err').textContent=err;return}
+    var list=f.kind==='i'?state.interp:state.lect;
+    if(f.id){for(var k=0;k<list.length;k++){if(list[k].id===f.id){data.id=f.id;list[k]=data;break}}}
+    else{data.id=uid();list.push(data)}
+    persist();
+    state.year=+data.date.slice(0,4)||state.year;
+    closeForm();renderAll();
+  }
+
+  /* ---------- actions ---------- */
+  function cycle(kind,id){
+    var r=(kind==='i'?state.interp:state.lect).filter(function(x){return x.id===id})[0];if(!r)return;
+    r.status=r.status==='정산'?'미정산':'정산';persist();renderAll();
+  }
+  function delDoc(){
+    var d=state.del;if(!d)return;
+    if(d.kind==='i')state.interp=state.interp.filter(function(r){return r.id!==d.id});
+    else state.lect=state.lect.filter(function(r){return r.id!==d.id});
+    state.del=null;persist();renderAll();
+  }
+  document.addEventListener('click',function(ev){
+    var el=ev.target.closest('[data-act]');if(!el)return;
+    var a=el.dataset.act;
+    if(a==='tab')setTab(el.dataset.tab);
+    else if(a==='add-i')openForm('i');
+    else if(a==='add-l')openForm('l');
+    else if(a==='add-scheduled'){var sm=String(el.dataset.month).padStart(2,'0');openForm('l',null,{org:el.dataset.org,date:state.year+'-'+sm+'-01',name:el.dataset.org+' '+sm+'월 강의료',status:'미정산',fee:null});}
+    else if(a==='edit')openForm(el.dataset.kind,el.dataset.id);
+    else if(a==='del'){state.del={kind:el.dataset.kind,id:el.dataset.id};renderInterp();renderLect()}
+    else if(a==='del-no'){state.del=null;renderInterp();renderLect()}
+    else if(a==='del-yes')delDoc();
+    else if(a==='cycle')cycle(el.dataset.kind,el.dataset.id);
+    else if(a==='close')closeForm();
+    else if(a==='save')save();
+    else if(a==='year'){state.year=+el.dataset.y;renderAll()}
+    else if(a==='year-new'){state.addingYear=true;state.yearErr='';renderYear()}
+    else if(a==='year-cancel'){state.addingYear=false;state.yearErr='';renderYear()}
+    else if(a==='year-add')addYear();
+    else if(a==='export-i')exportCsv('i');
+    else if(a==='export-l')exportCsv('l');
+    else if(a==='backup')backup();
+    else if(a==='restore')$('restore-file').click();
+    else if(a==='restore-yes')applyRestore();
+    else if(a==='restore-no'){state.pendingRestore=null;state.restoreErr=false;renderBanner()}
+  });
+  $('ov').addEventListener('mousedown',function(ev){if(ev.target===$('ov'))closeForm()});
+  document.addEventListener('keydown',function(ev){if(ev.key==='Escape'&&state.form)closeForm()});
+  $('sheet').addEventListener('input',function(ev){
+    var f=state.form;if(!f)return;var id=ev.target.id;
+    if(id==='f-comm'){f.commTouched=ev.target.value!=='';autoCalc();return}
+    if(id==='f-net'){f.netTouched=ev.target.value!=='';return}
+    if(id==='f-fee'){f.feeTouched=ev.target.value!=='';return}
+    if(id==='f-gross'||id==='f-rev'||id==='f-hours'||id==='f-rate')autoCalc();
+  });
+  $('sheet').addEventListener('change',function(ev){
+    if(ev.target.id==='f-yo'){var on=ev.target.checked;$('w-date').hidden=on;$('w-year').hidden=!on}
+  });
+  function addYear(){
+    var v=$('y-new')?$('y-new').value.trim():'',y=+v;
+    if(!/^\d{4}$/.test(v)||y<2000||y>2100){state.yearErr='2000~2100 사이 연도를 4자리로 입력하세요.';renderYear();return}
+    state.meta.years=(state.meta.years||[]).filter(function(x){return x!==y}).concat([y]);
+    state.year=y;state.addingYear=false;state.yearErr='';persist();renderAll();
+  }
+  $('years').addEventListener('keydown',function(ev){if(ev.key==='Enter'&&ev.target.id==='y-new'){ev.preventDefault();addYear()}if(ev.key==='Escape'&&state.addingYear){state.addingYear=false;state.yearErr='';renderYear()}});
+  $('restore-file').addEventListener('change',function(ev){var f=ev.target.files&&ev.target.files[0];if(f)readBackup(f);ev.target.value=''});
+  ['i-month','i-mode','i-status','i-q'].forEach(function(id){$(id).addEventListener('input',renderInterp)});
+  ['l-month','l-status','l-q'].forEach(function(id){$(id).addEventListener('input',renderLect)});
+  var mopts='';for(var mi=1;mi<=12;mi++)mopts+='<option value="'+String(mi).padStart(2,'0')+'">'+mi+'월</option>';
+  $('i-month').insertAdjacentHTML('beforeend',mopts);$('l-month').insertAdjacentHTML('beforeend',mopts);
+  var rz=null;window.addEventListener('resize',function(){clearTimeout(rz);rz=setTimeout(function(){if(state.tab==='summary')renderChart()},150)});
+
+  /* ---------- boot ---------- */
+  // 2025년부터 기관명 KUMU를 KUMQ로 표준화합니다.
+  function migrateLectureOrgNames(){
+    state.lect.forEach(function(r){
+      var y=+(r.date||'').slice(0,4);
+      if(y>=2025 && String(r.org||'').trim().toUpperCase()==='KUMU')r.org='KUMQ';
+    });
+  }
+  try{localStorage.removeItem(OLD_KEY)}catch(e){}
+  var o=load();
+  if(o){state.interp=o.interp;state.lect=o.lect;state.meta=o.meta||{}}
+  else{state.interp=[];state.lect=[];state.meta={};persist()}
+  // 배포용: 개인 업무 데이터는 미리 넣지 않습니다. 각 사용자가 직접 입력합니다.
+  migrateLectureOrgNames();
+  pickYear();
+  renderAll();
+})();
+</script>
+</body>
+</html>
