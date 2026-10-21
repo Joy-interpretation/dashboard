@@ -168,12 +168,17 @@ button.pill{cursor:pointer;font-family:inherit}
 #interp-table td.pre{min-width:0}
 #interp-table td.tm{min-width:0;white-space:pre-line;overflow-wrap:anywhere}
 #interp-table td.nw,#interp-table td.num{white-space:nowrap}
+#interp-table td.dt div{white-space:nowrap}
 #interp-table td:last-child,#interp-table th:last-child{min-width:0}
 #interp-table td:last-child{white-space:nowrap}
 #interp-table td:last-child .status-actions{width:100%;box-sizing:border-box;justify-content:space-between;gap:6px}
 #interp-table .status-actions .acts{gap:5px}
 #interp-table .status-actions .btn{padding-left:7px;padding-right:7px}
-@media(max-width:1200px){#interp-table table{min-width:1050px}}
+#interp-table table{min-width:1400px}
+#interp-table th,#interp-table th.num,#interp-table th.money-col,#interp-table td,#interp-table td.num,#interp-table td.money-col,#interp-table td.tm,#interp-table td.pre,#interp-table td.nm,#interp-table td.dt{text-align:center}
+#interp-table tr.band td,#interp-table td.dt,#interp-table td.nm,#interp-table td.tm,#interp-table td.pre{text-align:left}
+#interp-table thead th{text-align:center}
+#interp-table td:last-child .status-actions{justify-content:center}
 .status-actions .acts{gap:8px}
 .empty{color:var(--ink-2);padding:20px 4px;text-align:center}
 .banner{border:1px dashed var(--line);background:var(--surface);border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between}
@@ -216,6 +221,9 @@ svg.chart{display:block;width:100%;height:auto}
 }
 @media (prefers-reduced-motion:no-preference){.btn,.navb{transition:background .12s,color .12s}}
 .u2{font-family:var(--body);font-size:11px;color:var(--ink-2);margin-left:2px}
+th.num,td.num,td.tm{font-family:var(--body);font-size:14px}
+th.num,th.money-col,#interp-table thead th{font-size:12px}
+td.tm{font-size:14px}
 /* Financial columns use the same font as other table cells. */
 th.money-col{font-family:var(--body);font-size:12px}
 td.money-col{font-family:var(--body);font-size:14px}
@@ -291,6 +299,17 @@ td.money-col{font-family:var(--body);font-size:14px}
   </section>
 
   <section class="card" id="p-data" hidden>
+    <h2>정산 설정</h2>
+    <p class="hint" style="margin:0 0 10px">업무를 새로 입력할 때 수수료와 공제 후 금액을 자동으로 계산하는 비율입니다. 이미 저장된 내역은 바뀌지 않고, 입력창에서 칸마다 직접 고칠 수도 있습니다.</p>
+    <div class="ctl" style="align-items:flex-end;gap:14px;margin-bottom:14px">
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--ink-2)">기본 수수료율 (%) · 공급가액 기준<input type="number" id="s-comm" min="0" max="100" step="0.1" style="width:170px"></label>
+      <label style="display:grid;gap:4px;font-size:12px;color:var(--ink-2)">공제 세율 (%) · 원천징수 등<input type="number" id="s-tax" min="0" max="100" step="0.1" style="width:170px"></label>
+      <span class="hint" id="s-msg" style="margin:0 0 8px"></span>
+    </div>
+    <h3 style="font-size:13.5px;margin:0 0 4px">에이전시별 수수료율 (기본과 다른 곳만)</h3>
+    <p class="hint" style="margin:0 0 8px">여기에 등록한 에이전시는 업무 입력 때 기본 수수료율 대신 이 비율이 자동 적용됩니다. 직거래처럼 수수료가 없으면 0을 입력하세요. 띄어쓰기와 대소문자는 구분하지 않습니다.</p>
+    <div id="rate-list" style="display:grid;gap:8px;margin-bottom:8px"></div>
+    <div class="ctl" style="margin-bottom:22px"><button class="btn sm" data-act="rate-add">+ 에이전시 추가</button></div>
     <h2>데이터 관리</h2>
     <p class="hint" style="margin:0 0 10px">입력한 내역은 이 브라우저에만 저장됩니다. 사이트 데이터를 지우거나 다른 기기에서 열면 보이지 않으니, 주기적으로 백업 파일을 저장해 두세요.</p>
     <div class="ctl">
@@ -311,9 +330,16 @@ td.money-col{font-family:var(--body);font-size:14px}
 <script>
 (function(){
   var state={year:new Date().getFullYear(),tab:'summary',interp:[],lect:[],meta:{},del:null,form:null,pendingRestore:null,restoreErr:false,addingYear:false,yearErr:''};
-  var KEY='interpreter-settlement-public-v4',OLD_KEY='interpreter-settlement-v2',canStore=true;
+  var KEY='interpreter-settlement-dist-v1',OLD_KEY='interpreter-settlement-v2',canStore=true;
   var ST=['미정산','정산'];
-  var RATE_COMM=0.15,RATE_TAX=0.033;
+  /* 기본 수수료율과 세율, 에이전시별 예외 수수료율은 '데이터·백업' 탭의 정산 설정에서 바꿉니다. */
+  function rComm(){var v=state.meta.rates&&state.meta.rates.comm;return typeof v==='number'&&v>=0&&v<=1?v:0}
+  function rTax(){var v=state.meta.rates&&state.meta.rates.tax;return typeof v==='number'&&v>=0&&v<=1?v:0.033}
+  function pt(x){return (Math.round(x*10000)/100)+'%'}
+  function normA(n){return String(n||'').replace(/\s+/g,'').toLowerCase()}
+  function agList(){return (state.meta.rates&&state.meta.rates.ag)||[]}
+  function agRate(name){var k=normA(name);if(!k)return null;var l=agList();for(var i=0;i<l.length;i++){if(normA(l[i].name)===k&&typeof l[i].comm==='number')return l[i].comm}return null}
+  function commFor(name){var v=agRate(name);return v==null?rComm():v}
   var WD='일월화수목금토';
   var nf=new Intl.NumberFormat('ko-KR');
   function $(id){return document.getElementById(id)}
@@ -330,7 +356,7 @@ td.money-col{font-family:var(--body);font-size:14px}
   function fmtRange(a,b){
     if(!a)return '';
     if(a.slice(5,7)==='00')return '월 미지정';
-    if(b&&b!==a)return md(a)+' ~ '+md(b);
+    if(b&&b!==a){var da=new Date(a+'T00:00:00'),db=new Date(b+'T00:00:00');return md(a)+' ('+WD[da.getDay()]+') ~ '+md(b)+' ('+WD[db.getDay()]+')'}
     var dt=new Date(a+'T00:00:00');return md(a)+' ('+WD[dt.getDay()]+')';
   }
   function todayStr(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
@@ -345,10 +371,10 @@ td.money-col{font-family:var(--body);font-size:14px}
   function load(){try{var s=localStorage.getItem(KEY);if(s){var o=JSON.parse(s);if(o&&Array.isArray(o.interp)&&Array.isArray(o.lect))return o}}catch(e){canStore=false}return null}
 
   /* 엑셀 파일(2024·2025년 업무 내역)에서 옮겨 온 내역. 버전이 오르면 새 내역만 한 번 추가됩니다. */
-  var PRELOAD_V=2;
+  var PRELOAD_V=0;
   var PRELOAD={"interp":[],"lect":[]};
   /* 버전이 오를 때 이미 저장된 내역에 반영할 보정값. 비어 있는 칸만 채우고 직접 고친 값은 건드리지 않습니다. */
-  var PATCHES=[{v:2,items:[{"id":"p24-18","set":{"dateEnd":"2024-06-16"}},{"id":"p24-32","set":{"dateEnd":"2024-10-31"}},{"id":"p24-35","set":{"dateEnd":"2024-11-30"}}]}];
+  var PATCHES=[];
   function applyPreload(){
     var cur=state.meta.preload||0;
     if(cur>=PRELOAD_V)return;
@@ -536,19 +562,19 @@ td.money-col{font-family:var(--body);font-size:14px}
 
   function interpRow(r){
     var sub=[r.topic,r.venue].filter(Boolean).join(' · ');
-    return '<tr><td class="nw">'+fmtRange(r.date,r.dateEnd)+'</td>'+
+    return '<tr><td class="nw dt">'+fmtRange(r.date,r.dateEnd).split(' ~ ').map(function(x,i){return i?'<div>~ '+x+'</div>':'<div>'+x+'</div>'}).join('')+'</td>'+
       '<td class="nm"><div>'+esc(r.name)+'</div>'+(sub?'<div class="mut">'+esc(sub)+'</div>':'')+'</td>'+
       '<td class="nw">'+modePill(r.mode)+'</td>'+
       '<td class="tm">'+(r.time?esc(r.time):'<span class="dim">–</span>')+'</td>'+
       '<td class="pt">'+(r.partner?esc(r.partner):'<span class="dim">–</span>')+'</td>'+
-      '<td class="num money-col">'+dash(num(r.gross),won)+'</td><td class="num money-col">'+dash(num(r.comm),won)+'</td><td class="num money-col">'+dash(num(r.rev),won)+'</td>'+
-      '<td class="num money-col"><strong>'+won(num(r.net))+'</strong></td>'+
+      '<td class="num money-col">'+dash(num(r.gross),wonS)+'</td><td class="num money-col">'+dash(num(r.comm),wonS)+'</td><td class="num money-col">'+dash(num(r.rev),wonS)+'</td>'+
+      '<td class="num money-col"><strong>'+wonS(num(r.net))+'</strong></td>'+
       '<td class="ag">'+esc(r.agency)+'</td>'+
       '<td class="pre">'+esc(r.note)+'</td>'+
       '<td><div class="acts status-actions">'+statusBtn('i',r)+actCell('i',r)+'</div></td></tr>';
   }
   function sumRow(label,t,cls){
-    return '<tr class="'+cls+'"><td colspan="5" class="lab">'+label+'</td><td class="num">'+won(t.g)+'</td><td class="num">'+won(t.c)+'</td><td class="num">'+won(t.r)+'</td><td class="num">'+won(t.n)+'</td><td colspan="3"></td></tr>';
+    return '<tr class="'+cls+'"><td colspan="5" class="lab">'+label+'</td><td class="num money-col">'+wonS(t.g)+'</td><td class="num money-col">'+wonS(t.c)+'</td><td class="num money-col">'+wonS(t.r)+'</td><td class="num money-col">'+wonS(t.n)+'</td><td colspan="3"></td></tr>';
   }
 
   function renderInterp(){
@@ -566,7 +592,7 @@ td.money-col{font-family:var(--body);font-size:14px}
       return true;
     }).sort(byDateAsc);
     if(!rows.length){box.innerHTML='<p class="empty">'+state.year+'년에 조건과 일치하는 내역이 없습니다.</p>';return}
-    var h='<table><colgroup><col style="width:7%"><col style="width:14%"><col style="width:6%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:6%"><col style="width:6%"><col style="width:9%"><col style="width:8%"><col style="width:8%"><col style="width:12%"></colgroup><thead><tr><th>일자</th><th>행사명</th><th>업무</th><th>시간</th><th>파트너</th><th class="num money-col">공급가액</th><th class="num money-col">수수료</th><th class="num money-col">감수료</th><th class="num money-col">공제 후 금액</th><th>에이전시</th><th>비고</th><th>정산</th></tr></thead><tbody>';
+    var h='<table><colgroup><col style="width:8%"><col style="width:16%"><col style="width:5%"><col style="width:9%"><col style="width:8%"><col style="width:8%"><col style="width:7%"><col style="width:5%"><col style="width:8%"><col style="width:8%"><col style="width:7%"><col style="width:11%"></colgroup><thead><tr><th>일자</th><th>행사명</th><th>업무</th><th>시간</th><th>파트너</th><th class="num money-col">공급가액</th><th class="num money-col">수수료</th><th class="num money-col">감수료</th><th class="num money-col">공제 후 금액</th><th>에이전시</th><th>비고</th><th>정산</th></tr></thead><tbody>';
     [['상반기 (1–6월)',function(r){return monthOf(r)<=6},'상반기'],['하반기 (7–12월)',function(r){return monthOf(r)>6},'하반기']].forEach(function(hf){
       var part=rows.filter(hf[1]);if(!part.length)return;
       h+='<tr class="band"><td colspan="12">'+hf[0]+' · '+part.length+'건</td></tr>';
@@ -609,7 +635,7 @@ td.money-col{font-family:var(--body);font-size:14px}
     state.year=ys.length?Math.max.apply(null,ys):new Date().getFullYear();
   }
   function yearList(){
-    var cy=new Date().getFullYear(),ys={};ys[cy]=1;ys[state.year]=1;
+    var cy=new Date().getFullYear(),ys={};ys[cy]=1;ys[cy-1]=1;ys[state.year]=1;
     (state.meta.years||[]).forEach(function(y){ys[y]=1});
     state.interp.concat(state.lect).forEach(function(r){var y=(r.date||'').slice(0,4);if(/^\d{4}$/.test(y))ys[y]=1});
     return Object.keys(ys).map(Number).sort(function(a,b){return a-b});
@@ -628,7 +654,7 @@ td.money-col{font-family:var(--body);font-size:14px}
     if(!canStore)h+='<div class="banner err"><span>이 브라우저가 저장을 막고 있어 입력한 내역이 창을 닫으면 사라집니다. 시크릿 모드를 끄거나 사이트 데이터 저장을 허용해 주세요. 그 전까지는 아래 ‘백업 저장’을 자주 눌러 주세요.</span></div>';
     if(state.restoreErr)h+='<div class="banner err"><span>백업 파일을 읽을 수 없습니다. 이 앱에서 저장한 JSON 파일인지 확인해 주세요.</span><button class="btn sm" data-act="restore-no">닫기</button></div>';
     if(state.pendingRestore)h+='<div class="banner"><span>백업 파일(업무 '+state.pendingRestore.interp.length+'건, 강의 '+state.pendingRestore.lect.length+'건)로 현재 내역을 모두 덮어쓸까요?</span><span class="acts"><button class="btn sm danger" data-act="restore-yes">덮어쓰기</button><button class="btn sm" data-act="restore-no">취소</button></span></div>';
-    if(!state.interp.length&&!state.lect.length)h+='<div class="banner"><span>아직 입력된 내역이 없습니다. 오른쪽 위 ‘+ 업무 추가’, ‘+ 강의 추가’로 첫 내역을 입력하세요.</span></div>';
+    if(!state.interp.length&&!state.lect.length)h+='<div class="banner"><div><strong>처음 오셨나요? 이렇게 시작하세요.</strong><ol style="margin:6px 0 0;padding-left:18px;line-height:1.7"><li>왼쪽 ‘데이터·백업’에서 <b>기본 수수료율과 세율</b>을 설정하고, 기본과 다른 에이전시는 따로 등록합니다.</li><li>오른쪽 위 ‘+ 업무 추가’, ‘+ 강의 추가’로 내역을 입력합니다.</li><li>입력한 내역은 이 브라우저에만 저장되므로, 주기적으로 <b>백업 파일</b>을 저장해 두세요.</li></ol></div><button class="btn sm" data-act="tab" data-tab="data">설정 열기</button></div>';
     $('banner').innerHTML=h;
   }
   function renderAll(){renderYear();renderBanner();renderTiles();renderBreakdowns();renderChart();renderMonthly();renderInterp();renderLect()}
@@ -655,7 +681,7 @@ td.money-col{font-family:var(--body);font-size:14px}
     $('dl-agency').innerHTML=Object.keys(a).map(function(v){return '<option value="'+esc(v)+'">'}).join('');
     $('dl-org').innerHTML=Object.keys(o).map(function(v){return '<option value="'+esc(v)+'">'}).join('');
   }
-  function autoNet(g,c,rv){return g>0?Math.round((g-c-rv)*(1-RATE_TAX)):''}
+  function autoNet(g,c,rv){return g>0?Math.round((g-c-rv)*(1-rTax())):''}
   function openForm(kind,id,preset){
     var rec=null;
     if(id)rec=(kind==='i'?state.interp:state.lect).filter(function(r){return r.id===id})[0]||null;
@@ -665,7 +691,7 @@ td.money-col{font-family:var(--body);font-size:14px}
     var f=state.form;
     if(rec&&kind==='i'){
       var g=num(r.gross);
-      f.commTouched=num(r.comm)!==Math.round(g*RATE_COMM);
+      f.commTouched=num(r.comm)!==Math.round(g*commFor(r.agency));
       f.netTouched=num(r.net)!==autoNet(g,num(r.comm),num(r.rev));
     }
     if(rec&&kind==='l')f.feeTouched=num(r.fee)!==Math.round(num(r.hours)*num(r.rate));
@@ -684,7 +710,7 @@ td.money-col{font-family:var(--body);font-size:14px}
       '<label>수수료(원)<input type="number" id="f-comm" inputmode="numeric" min="0" step="1" value="'+(r.comm!=null?esc(r.comm):'')+'"></label>'+
       '<label>감수료(원)<input type="number" id="f-rev" inputmode="numeric" min="0" step="1" value="'+(r.rev!=null?esc(r.rev):'')+'"></label>'+
       '<label>공제 후 금액(원)<input type="number" id="f-net" inputmode="numeric" min="0" step="1" value="'+(r.net!=null?esc(r.net):'')+'"></label>'+
-      '<div class="hint full">수수료는 공급가액의 15%, 공제 후 금액은 (공급가액 − 수수료 − 감수료)에서 3.3%를 뺀 값으로 자동 입력됩니다. 직접 고친 칸은 그 값이 우선하고, 비우면 다시 자동 계산됩니다.</div>'+
+      '<div class="hint full">수수료는 공급가액의 기본 '+pt(rComm())+'(에이전시별 설정이 있으면 그 비율), 공제 후 금액은 (공급가액 − 수수료 − 감수료)에서 '+pt(rTax())+'를 뺀 값으로 자동 입력됩니다. 직접 고친 칸은 그 값이 우선하고, 비우면 다시 자동 계산됩니다.</div>'+
       '<label>장소 (선택)<input type="text" id="f-venue" value="'+esc(r.venue||'')+'"></label>'+
       '<label>주제 (선택)<input type="text" id="f-topic" value="'+esc(r.topic||'')+'"></label>'+
       '<label class="full">비고 (여러 줄 가능)<textarea id="f-note" rows="2">'+esc(r.note||'')+'</textarea></label></div>';
@@ -711,7 +737,7 @@ td.money-col{font-family:var(--body);font-size:14px}
     var f=state.form;if(!f)return;
     if(f.kind==='i'){
       var g=num($('f-gross').value);
-      if(!f.commTouched)$('f-comm').value=g>0?Math.round(g*RATE_COMM):'';
+      if(!f.commTouched)$('f-comm').value=g>0?Math.round(g*commFor($('f-agency').value)):'';
       if(!f.netTouched)$('f-net').value=autoNet(g,num($('f-comm').value),num($('f-rev').value));
     }else if(!f.feeTouched){
       var q=num($('f-hours').value),rt=num($('f-rate').value);$('f-fee').value=(q&&rt)?Math.round(q*rt):'';
@@ -723,6 +749,7 @@ td.money-col{font-family:var(--body);font-size:14px}
     var data,err='';
     if(f.kind==='i'){
       data={date:g('f-date'),dateEnd:g('f-end'),agency:g('f-agency'),name:g('f-name'),mode:g('f-mode'),partner:g('f-partner'),time:g('f-time'),gross:g('f-gross')===''?null:num(g('f-gross')),comm:num(g('f-comm')),rev:g('f-rev')===''?null:num(g('f-rev')),net:num(g('f-net')),note:g('f-note'),venue:g('f-venue'),topic:g('f-topic'),status:g('f-status')};
+      if(data.dateEnd===data.date)data.dateEnd='';
       if(!data.date)err='일자를 입력하세요.';
       else if(data.dateEnd&&data.dateEnd<data.date)err='종료일이 시작일보다 앞섭니다.';
       else if(!data.name)err='행사명을 입력하세요.';
@@ -740,6 +767,12 @@ td.money-col{font-family:var(--body);font-size:14px}
     if(f.id){for(var k=0;k<list.length;k++){if(list[k].id===f.id){data.id=f.id;list[k]=data;break}}}
     else{data.id=uid();list.push(data)}
     persist();
+    if(f.kind==='i'&&!f.id&&data.agency&&num(data.gross)>0&&agRate(data.agency)==null){
+      var rt=Math.round(num(data.comm)/num(data.gross)*10000)/10000;
+      if(Math.abs(rt-rComm())>0.0005&&rt>=0&&rt<=1&&window.confirm('‘'+data.agency+'’의 수수료율을 '+pt(rt)+'(으)로 저장할까요?\n다음부터 이 에이전시는 자동으로 '+pt(rt)+'가 적용됩니다.')){
+        state.meta.rates=state.meta.rates||{};state.meta.rates.ag=agList().concat([{name:data.agency,comm:rt}]);persist();renderRates();
+      }
+    }
     state.year=+data.date.slice(0,4)||state.year;
     closeForm();renderAll();
   }
@@ -782,12 +815,16 @@ td.money-col{font-family:var(--body);font-size:14px}
   });
   $('ov').addEventListener('mousedown',function(ev){if(ev.target===$('ov'))closeForm()});
   document.addEventListener('keydown',function(ev){if(ev.key==='Escape'&&state.form)closeForm()});
+  /* 종료일이 비어 있으면 시작일 값으로 미리 채워 달력이 시작일의 달로 열리게 합니다(저장 시 시작일과 같으면 빈 값으로 정리). */
+  $('sheet').addEventListener('focusin',function(ev){
+    if(ev.target.id==='f-end'&&!ev.target.value){var sd=$('f-date');if(sd&&sd.value)ev.target.value=sd.value}
+  });
   $('sheet').addEventListener('input',function(ev){
     var f=state.form;if(!f)return;var id=ev.target.id;
     if(id==='f-comm'){f.commTouched=ev.target.value!=='';autoCalc();return}
     if(id==='f-net'){f.netTouched=ev.target.value!=='';return}
     if(id==='f-fee'){f.feeTouched=ev.target.value!=='';return}
-    if(id==='f-gross'||id==='f-rev'||id==='f-hours'||id==='f-rate')autoCalc();
+    if(id==='f-gross'||id==='f-rev'||id==='f-hours'||id==='f-rate'||id==='f-agency')autoCalc();
   });
   $('sheet').addEventListener('change',function(ev){
     if(ev.target.id==='f-yo'){var on=ev.target.checked;$('w-date').hidden=on;$('w-year').hidden=!on}
@@ -806,21 +843,42 @@ td.money-col{font-family:var(--body);font-size:14px}
   $('i-month').insertAdjacentHTML('beforeend',mopts);$('l-month').insertAdjacentHTML('beforeend',mopts);
   var rz=null;window.addEventListener('resize',function(){clearTimeout(rz);rz=setTimeout(function(){if(state.tab==='summary')renderChart()},150)});
 
-  /* ---------- boot ---------- */
-  // 2025년부터 기관명 KUMU를 KUMQ로 표준화합니다.
-  function migrateLectureOrgNames(){
-    state.lect.forEach(function(r){
-      var y=+(r.date||'').slice(0,4);
-      if(y>=2025 && String(r.org||'').trim().toUpperCase()==='KUMU')r.org='KUMQ';
-    });
+  function loadSettings(){$('s-comm').value=Math.round(rComm()*10000)/100;$('s-tax').value=Math.round(rTax()*10000)/100}
+  function renderRates(){
+    var l=agList();
+    $('rate-list').innerHTML=l.length?l.map(function(a,i){
+      return '<div class="ctl" style="gap:8px;align-items:center"><input type="text" data-rate-name="'+i+'" value="'+esc(a.name)+'" placeholder="에이전시 이름" list="dl-agency" style="width:220px"><input type="number" data-rate-val="'+i+'" value="'+(typeof a.comm==='number'?Math.round(a.comm*10000)/100:'')+'" min="0" max="100" step="0.1" style="width:100px" aria-label="수수료율(%)"><span class="hint" style="margin:0">%</span><button class="btn sm" data-act="rate-del" data-i="'+i+'">삭제</button></div>';
+    }).join(''):'<p class="hint" style="margin:0">등록된 에이전시가 없습니다. 모든 업무에 기본 수수료율이 적용됩니다.</p>';
   }
-  try{localStorage.removeItem(OLD_KEY)}catch(e){}
+  function saveRateField(el){
+    var r=(state.meta.rates=state.meta.rates||{});r.ag=r.ag||[];
+    var i=el.dataset.rateName!=null?+el.dataset.rateName:+el.dataset.rateVal,a=r.ag[i];if(!a)return;
+    if(el.dataset.rateName!=null)a.name=el.value.trim();
+    else{var v=parseFloat(el.value);if(el.value===''){a.comm=null}else if(v>=0&&v<=100){a.comm=Math.round(v*100)/10000}else{renderRates();$('s-msg').textContent='0~100 사이의 숫자를 입력하세요.';return}}
+    persist();$('s-msg').textContent='저장되었습니다. 이후 새로 입력하는 내역부터 적용됩니다.';
+  }
+  $('p-data').addEventListener('change',function(ev){
+    var el=ev.target,v;
+    if(el.id==='s-comm'||el.id==='s-tax'){
+      v=parseFloat(el.value);
+      if(!(v>=0&&v<=100)){loadSettings();$('s-msg').textContent='0~100 사이의 숫자를 입력하세요.';return}
+      state.meta.rates=state.meta.rates||{};state.meta.rates[el.id==='s-comm'?'comm':'tax']=Math.round(v*100)/10000;
+      persist();loadSettings();$('s-msg').textContent='저장되었습니다. 이후 새로 입력하는 내역부터 적용됩니다.';
+    }else if(el.dataset&&(el.dataset.rateName!=null||el.dataset.rateVal!=null))saveRateField(el);
+  });
+  $('p-data').addEventListener('click',function(ev){
+    var b=ev.target.closest('[data-act]');if(!b)return;
+    if(b.dataset.act==='rate-add'){var r=(state.meta.rates=state.meta.rates||{});r.ag=agList().concat([{name:'',comm:rComm()}]);persist();renderRates();var ins=$('rate-list').querySelectorAll('[data-rate-name]');if(ins.length)ins[ins.length-1].focus()}
+    else if(b.dataset.act==='rate-del'){state.meta.rates.ag.splice(+b.dataset.i,1);persist();renderRates()}
+  });
+
+  /* ---------- boot ---------- */
   var o=load();
   if(o){state.interp=o.interp;state.lect=o.lect;state.meta=o.meta||{}}
   else{state.interp=[];state.lect=[];state.meta={};persist()}
-  // 배포용: 개인 업무 데이터는 미리 넣지 않습니다. 각 사용자가 직접 입력합니다.
-  migrateLectureOrgNames();
+  applyPreload();
   pickYear();
+  loadSettings();renderRates();
   renderAll();
 })();
 </script>
